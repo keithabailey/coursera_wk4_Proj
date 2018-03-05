@@ -1,0 +1,117 @@
+---
+title: "week 4"
+author: "Keith Bailey"
+date: "March 4, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(randomForest)
+```
+
+## Purpose
+
+The purpose of this exercise is to attempt to create a categorisation algorithm to be able to predict, based on specific regressors, what the dependent variable, classe will be. Thie will help us determine the quality of a users exercise is and thus help the user improve or at least know how their workout is going/went.
+
+Lets start by fetching the data and some quick inspection
+
+```{r cars}
+training_initial <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testing_initial <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+dim(training_initial)
+```
+
+## Cleanup, cleanup, always a bloody cleanup
+
+As ever the data we have is not perfect. A quick inspection shows a lot of columns with NA, but no column is completely made of NA.
+
+```{r clean1}
+head(training_initial)
+```
+
+We can see that the the most NAs a single column has is 19,216.
+
+```{r clean2}
+max(colSums(is.na(training_initial)))
+```
+
+In fact, either a column has 0 NAs or 19,216. Therefore we are going to remove all columns with NAs present. But to continue the cleanup, we are also going to remove all blank records too.
+
+```{r clean3}
+training_initial <- training_initial[,colSums(is.na(training_initial))<19216]
+training_initial <- training_initial[,colSums(training_initial=="")<19216]
+```
+
+This has reduced our number of predictors down from 160 to 60.   
+
+A number of the variables in the data are not useful for categorical learning, such as time, window & X(the index)
+
+```{r clean4}
+training <- training_initial[,-c(1:7)]
+```
+
+Lets now split out training set into two, so we can see how well our model building does before we apply it to our test data
+
+```{r validation}
+set.seed(123)
+inTrain_split <- createDataPartition(training$classe, p=0.7, list = FALSE)
+
+split_training <- training[inTrain_split, ]
+split_validation <- training[-inTrain_split, ]
+
+```
+
+##Model Building
+
+###Random Forest
+Although we could lead here with a normal categorization tree and investigate pruning, using a random forest eliminates the need for this, even if you do need to get a coffee once you start it.
+
+To improve speed, we are going to use the randomForest package rather than caret.
+
+```{r rf1}
+
+modRF <- randomForest::randomForest(classe~ ., data=split_training, importance=TRUE,
+                           proximity=TRUE)
+
+print(modRF)
+```
+
+The random forest method only has an out of bag error rate of 0.54%, which leads me to believe this is a very effective. Let us now apply this to our validation set. If it is still very effective, we will move onto our prediction.
+
+###Validation Test
+
+Let us predict the validation values and compare to a confusion matrix and comparison plot.
+
+```{r validation1}
+predVal <- predict(modRF, newdata = split_validation)
+
+confusionMatrix(predVal, split_validation$class)
+
+```
+
+From this we can see the random forest has an accuracy rate of 99.46% in the validation set, which is incredibly good and not something you would expect in the wild. It is probably related to just how much data has been collected and how many regressors the dataset has.
+
+Lets inspect the data in the form of charts as well to see what the data looks like
+
+```{r charts}
+require(ggplot2)
+
+  ggplot() + geom_jitter(aes(predVal, split_validation$classe, colour = split_validation$classe), 
+              position = position_jitter(width = 0.05))
+
+
+```
+
+##Apply Our Model
+
+Now we have a lot of confidence in our model, let us apply it to the test set
+
+```{r applyToTest}
+
+predict(modRF, newdata = testing_initial)
+
+```
+
+
